@@ -1,4 +1,12 @@
 (executable
- (public_name server)
- (name main)
- (libraries server core eio_main))
+ (public_name wordduel_server)
+ (name run_server)
+ (modules run_server)
+ (libraries lib core eio_main))
+
+
+(executable
+ (public_name wordduel_client)
+ (name run_client)
+ (modules run_client)
+ (libraries lib core eio_main))
