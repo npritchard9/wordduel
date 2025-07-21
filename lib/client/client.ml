@@ -20,10 +20,6 @@ let run_client ~net ~addr =
   traceln "Client: connecting to server";
   let flow = Eio.Net.connect ~sw net addr in
   let rec loop () =
-    let buf = Cstruct.create 5 in
-    Eio.Flow.read_exact flow buf;
-    let word = Cstruct.to_string buf in
-    traceln "Client received %S" word;
     traceln "Type a message to send (or 'q' to exit):";
     Out_channel.flush Out_channel.stdout;
     match In_channel.input_line In_channel.stdin with
@@ -32,7 +28,11 @@ let run_client ~net ~addr =
         let msg = create line |> serialize in
         let cs = Cstruct.of_bigarray msg in
         Eio.Flow.write flow [ cs ];
-        loop ()
+        let buf = Cstruct.create 5 in
+        Eio.Flow.read_exact flow buf;
+        let res = Cstruct.to_string buf in
+        traceln "Client received %S" res;
+        if String.for_all res ~f:Char.is_alpha then () else loop ()
     | None -> traceln "EOF, closing client..."
   in
   loop ()

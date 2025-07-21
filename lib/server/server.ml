@@ -1,6 +1,8 @@
 open Core
 open Eio.Std
 
+let max_guesses = 5
+
 let get_file_size ~cwd =
   let file = Eio.Path.(cwd / "words.txt") in
   let stat = Eio.Path.stat ~follow:false file in
@@ -42,20 +44,22 @@ let handle_client cwd flow _addr =
   let reader = Eio.Buf_read.of_flow flow ~max_size:1024 in
   let word = get_word ~cwd in
   traceln "word is %s" word;
-  Eio.Flow.copy_string word flow;
-  let rec loop () =
+  let rec loop guesses =
     try
       let len = Eio.Buf_read.BE.uint32 reader |> Int32.to_int_exn in
       let guess = Eio.Buf_read.take len reader in
       traceln "Server received %S" guess;
-      let res = check_guess guess word in
-      Eio.Flow.copy_string res flow;
-      loop ()
+      if guesses = max_guesses || String.equal guess word then
+        Eio.Flow.copy_string word flow
+      else
+        let correctness = check_guess guess word in
+        Eio.Flow.copy_string correctness flow;
+        loop (guesses + 1)
     with
     | End_of_file -> traceln "End of input"
     | exn -> traceln "Error: %s" (Exn.to_string exn)
   in
-  loop ()
+  loop 1
 
 let run_server socket cwd =
   Eio.Net.run_server socket (handle_client cwd)
