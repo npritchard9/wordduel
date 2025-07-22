@@ -26,18 +26,39 @@ let get_word ~cwd =
   let file, size = get_file_size ~cwd in
   get_total_words size |> get_offset |> read_word file
 
+(*
+handle letters that have already been put in the right place showing up as in word but wrong position
+*)
 let check_guess guess answer =
-  let rec loop i acc =
-    if i >= 5 then acc
+  let counts =
+    String.fold answer ~init:Char.Map.empty ~f:(fun acc c ->
+        Map.update acc c ~f:(fun v -> Option.value v ~default:0 + 1))
+  in
+  let bytes = Bytes.init 5 ~f:(fun _ -> '0') in
+  let rec set_exact_matches i counts =
+    if i >= 5 then counts
     else
       let c = String.nget guess i in
       match String.nget answer i |> Char.equal c with
-      | true -> loop (i + 1) (acc ^ "2")
-      | false ->
-          let misplaced = if String.contains answer c then "1" else "0" in
-          loop (i + 1) (acc ^ misplaced)
+      | true ->
+          Bytes.set bytes i '2';
+          Map.update counts c ~f:(fun v -> Option.value v ~default:1 - 1)
+          |> set_exact_matches (i + 1)
+      | false -> set_exact_matches (i + 1) counts
   in
-  loop 0 ""
+  let rec set_partial_matches i counts =
+    if i >= 5 then ()
+    else
+      let c = String.nget guess i in
+      match (String.contains answer c, Map.find counts c) with
+      | true, Some v when v > 0 ->
+          Bytes.set bytes i '1';
+          Map.update counts c ~f:(fun v -> Option.value v ~default:1 - 1)
+          |> set_partial_matches (i + 1)
+      | _ -> set_partial_matches (i + 1) counts
+  in
+  set_exact_matches 0 counts |> set_partial_matches 0;
+  Bytes.to_string bytes
 
 let handle_client cwd flow _addr =
   traceln "Server: got connection from client";
