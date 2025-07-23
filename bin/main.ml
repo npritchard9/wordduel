@@ -1,7 +1,7 @@
 (* open Core *)
 
 (* open Eio.Std *)
-open Lib
+(* open Lib *)
 
 (* let handle_client flow _addr =
   traceln "Server: got connection from client";
@@ -28,7 +28,7 @@ let main ~net ~addr =
   Fiber.fork_daemon ~sw (fun () -> run_server server);
   run_client ~net ~addr *)
 
-let () =
-  (* Eio_main.run @@ fun env ->
+(* let () = *)
+(* Eio_main.run @@ fun env ->
   main ~net:(Eio.Stdenv.net env) ~addr:(`Tcp (Eio.Net.Ipaddr.V4.loopback, 8080)) *)
-  Server.run ()
+(* Server.run () *)

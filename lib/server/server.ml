@@ -26,9 +26,6 @@ let get_word ~cwd =
   let file, size = get_file_size ~cwd in
   get_total_words size |> get_offset |> read_word file
 
-(*
-handle letters that have already been put in the right place showing up as in word but wrong position
-*)
 let check_guess guess answer =
   let counts =
     String.fold answer ~init:Char.Map.empty ~f:(fun acc c ->
