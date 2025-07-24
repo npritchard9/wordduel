@@ -16,26 +16,44 @@ let serialize msg =
   buf
 
 let run_client ~net ~addr =
+  let rec loop flow =
+    let reader = Eio.Buf_read.of_flow flow ~max_size:1024 in
+    let len = Eio.Buf_read.BE.uint32 reader |> Int32.to_int_exn in
+    let res = Eio.Buf_read.take len reader in
+    traceln "Server: %s" res;
+    if String.is_prefix res ~prefix:"Game over" then ()
+    else
+      let rec get_guess () =
+        traceln "Type a 5-letter word to guess (or 'q' to exit):";
+        Out_channel.flush Out_channel.stdout;
+        match In_channel.input_line In_channel.stdin with
+        | Some "q" ->
+            traceln "Client exiting...";
+            None
+        | Some line when String.length line <> 5 ->
+            traceln "Invalid guess, please enter a 5-letter word.";
+            get_guess ()
+        | Some line -> Some line
+        | None ->
+            traceln "EOF, closing client...";
+            None
+      in
+      match get_guess () with
+      | Some guess ->
+          let msg = create guess |> serialize in
+          let cs = Cstruct.of_bigarray msg in
+          Eio.Flow.write flow [ cs ];
+          let reader = Eio.Buf_read.of_flow flow ~max_size:1024 in
+          let len = Eio.Buf_read.BE.uint32 reader |> Int32.to_int_exn in
+          let res = Eio.Buf_read.take len reader in
+          traceln "Server: %s" res;
+          loop flow
+      | None -> ()
+  in
   Switch.run ~name:"client" @@ fun sw ->
   traceln "Client: connecting to server";
   let flow = Eio.Net.connect ~sw net addr in
-  let rec loop () =
-    traceln "Type a message to send (or 'q' to exit):";
-    Out_channel.flush Out_channel.stdout;
-    match In_channel.input_line In_channel.stdin with
-    | Some "q" -> traceln "Client exiting..."
-    | Some line ->
-        let msg = create line |> serialize in
-        let cs = Cstruct.of_bigarray msg in
-        Eio.Flow.write flow [ cs ];
-        let buf = Cstruct.create 5 in
-        Eio.Flow.read_exact flow buf;
-        let res = Cstruct.to_string buf in
-        traceln "Client received %S" res;
-        if String.for_all res ~f:Char.is_alpha then () else loop ()
-    | None -> traceln "EOF, closing client..."
-  in
-  loop ()
+  loop flow
 
 let run () =
   Eio_main.run @@ fun env ->
