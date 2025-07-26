@@ -34,6 +34,14 @@ module Player = struct
   let create name flow =
     { name; flow; reader = Eio.Buf_read.of_flow flow ~max_size:1024 }
 
+  let send_game_over p ?winner word =
+    let winner_msg =
+      match winner with Some w -> sprintf "WINNER:%s" w | None -> "NO_WINNER"
+    in
+    sprintf "GAME_OVER:%s:WORD:%s" winner_msg word
+    |> Client.create |> Client.serialize |> Cstruct.of_bigarray
+    |> List.singleton |> Eio.Flow.write p.flow
+
   let send p msg =
     let msg = Client.create msg |> Client.serialize in
     let cs = Cstruct.of_bigarray msg in
@@ -56,7 +64,7 @@ module Game = struct
   let create ~cwd p1 p2 =
     let word = get_word ~cwd in
     traceln "word is %s" word;
-    { p1; p2; word; max_guesses = 5; turn = 0 }
+    { p1; p2; word; max_guesses = 6; turn = 0 }
 end
 
 let check_guess ~guess ~answer =
@@ -123,20 +131,22 @@ let run_game ~cwd flow1 flow2 =
   Player.send p2 "Game starting"; *)
   traceln "Server starting game";
   let rec game_loop () =
-    if game.turn >= (game.max_guesses * 2) - 1 then (
-      Player.send p1 ("Game over! The word was: " ^ game.word);
-      Player.send p2 ("Game over! The word was: " ^ game.word))
+    if game.turn >= game.max_guesses * 2 then (
+      Player.send_game_over p1 game.word;
+      Player.send_game_over p2 game.word)
     else
       let active_player, waiting_player =
         if game.turn land 1 = 0 then (p1, p2) else (p2, p1)
       in
-      Player.send active_player "Your turn";
+      Player.send active_player "YOUR_TURN";
       match handle_player active_player with
       | Some guess ->
           let res = check_guess ~guess ~answer:game.word in
           if String.equal guess game.word then (
-            Player.send active_player game.word;
-            Player.send waiting_player game.word)
+            Player.send_game_over active_player
+              ?winner:(Some active_player.name) game.word;
+            Player.send_game_over waiting_player
+              ?winner:(Some active_player.name) game.word)
           else (
             Player.send active_player res;
             game.turn <- game.turn + 1;
